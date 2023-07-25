@@ -1,5 +1,10 @@
 #!/bin/bash 
 
+####################################################################
+#                             FUNCTIONS                            #
+####################################################################
+
+# Display help
 function showHelp()
 {
     echo "routeConfig.sh - A script to convert routes to dhcpd.conf format"
@@ -12,84 +17,92 @@ function showHelp()
     echo "-o, --output              output file"
 }
 
-# Convertir le masque au format CIDR
+# Convert the mask in a windows standard into Linux standard
+# Arguments: mask
 function mask2cidr()
 {
-    IN=$1 #Argument de la fonction = masque
-    IFS='.' #Internal Field Separator
-    masklen=0 #Longueur du masque
+    IN=$1 # Arg function = mask
+    IFS='.' # Internal Field Separator
+    masklen=0 # Length of the mask
 
-    #Parcours des octets du masque
-    for octet in $IN
+    # Loop on each byte of the mask
+    for byte in $IN
     do
-        octetlen=7 #Longueur d'un l'octet
-        # Boucle pour calculer les puissances sucessives de 2
-        while [ "$octet" -gt 0 ]
+        bytelen=7 # byte length
+        # Loop to compute successive powers of 2
+        while [ "$byte" -gt 0 ]
         do
-            let "pow=2**$octetlen"
-            let "octet=$octet-$pow"
+            let "pow=2**$bytelen"
+            let "byte=$byte-$pow"
             ((masklen++))
-            ((octetlen--))
+            ((bytelen--))
         done
 
-        # Si octet < 0 alors le masque n'est pas valide
-        if [ "$octet" -lt 0 ]
+        # If the mask is not valid $byte < 0
+        if [ "$byte" -lt 0 ]
         then
             masklen=-1
             break
         fi
 
     done
-    echo $masklen #Retourne la longueur du masque
+    echo $masklen # Return the mask length
 
 }
 
-# Convertir le sous-réseaux dans le format attendu
+# Convert the network in a windows standard into the isc dhcpd.conf standard
+# Arguments: network, mask
 # 10.117.0.0/16 -> 16, 10, 117
 # 10.117.0.0/17 -> 17, 10, 117, 0
 function subnetCidr()
 {
-    mask=$2
-    IN=$1 #Argument de la fonction = réseau
+    mask=$2 # Args function = mask
+    IN=$1 # Args function = network
     IFS='.' #Internal Field Separator
 
-    reste=`expr $mask % 8` #On calcul le reste de la division par 8
-    div=`expr $mask / 8` #On calcul le quotient de la division par 8
-    taille=`expr $div + $reste` #On calcul le nomobre d'octet à mettre dans la configuration
+    remainder=`expr $mask % 8` # Compute remainder of the division by 8
+    div=`expr $mask / 8` # Compute the integer part of the division by 8
+    len=`expr $div + $remainder` # Compute number of bytes to display
+    res="" # Result of the function
+    cpt=0 # Counter
 
-    res=""
-    cpt=0
-    for octet in $IN
+    for byte in $IN
     do
-        if [ "$cpt" -ge "$taille" ]
+        if [ "$cpt" -ge "$len" ]
         then
             break
         fi
-        res="$res, $octet"
+        res="$res, $byte"
         ((cpt++))
     done
     echo "$mask$res"
 }
 
+# Convert the gateway in a windows standard into the isc dhcpd.conf standard
+# Arguments: gateway
 function destinationShape()
 {
-    IN=$1 #Argument de la fonction = passerelle
-    IFS='.' #Internal Field Separator
+    IN=$1 # Arg function = gateway
+    IFS='.' # Internal Field Separator
 
     res=""
 
-    for octet in $IN
+    for byte in $IN
     do
-        res="$res, $octet"
+        res="$res, $byte"
     done
 
     echo "$res"
 }
-# Tests unitaires des fonctions
 
+# Unit tests
 #mask2cidr 255.255.128.0
 #subnetCidr 10.117.0.0 25
 #destinationShape 11.15.78.4
+
+####################################################################
+#                                MAIN                              #
+####################################################################
 
 POSITIONAL_ARGS=()
 
@@ -124,7 +137,7 @@ done
 # If input file is not specified exit
 if [ -z "$input_file" ]
 then
-    echo "Le fichier d'entrée n'est pas spécifié"
+    echo "Input file is not specified"
     showHelp
     exit 1
 fi
@@ -137,11 +150,11 @@ fi
 
 set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
 
-# On crée le fichier d'équivalence de notation
+# Create the output file
 touch $output_file
-echo "  réseau    masque   passerelle" > $output_file
+echo "  network    mask   gateway" > $output_file
 
-# Lire le fichier contenant les routes ligne par ligne
+# Read the input file line by line
 while read line
 do
 
@@ -154,39 +167,41 @@ do
         exit 1
     fi
 
-    # On récupère le masque
-    masque=`echo $line | awk '{print $2}'`
-    #echo $masque
+    # Extract the mask
+    mask=`echo $line | awk '{print $2}'`
+    #echo $mask
 
-    # On récupere le réseau
-    reseau=`echo $line | awk '{print $1}'`
-    #echo $reseau
+    # Extract the network
+    network=`echo $line | awk '{print $1}'`
+    #echo $network
 
-    # On récupere la passerelle
-    passerelle=`echo $line | awk '{print $3}'`
-    #echo $passerelle
+    # Extract the gateway
+    gateway=`echo $line | awk '{print $3}'`
+    #echo $gateway
 
-    # On appel les fonctions pour mettre en forme les données
-    cidr=$(mask2cidr $masque)
+    # Convert the mask in a Linux standard
+    cidr=$(mask2cidr $mask)
     if [ "$cidr" -eq "-1" ]
     then
-        echo "Le masque $masque n'est pas valide"
+        echo "The following mask is not valid: $mask"
         exit 1
     fi
 
-    network=$(subnetCidr $reseau $cidr)
-    destination=$(destinationShape $passerelle)
+    # Convert the network in a Linux standard
+    network=$(subnetCidr $network $cidr)
+    # Convert the gateway in a Linux standard
+    destination=$(destinationShape $gateway)
 
-    # On concatène les résultats
+    # Concatenate the result
     res="$res$network$destination, "
 
-    # On ajoute les équivalences dans le fichier d'équivalence de notation 
+    # Write the result in the output file
     echo "$line => $network$destination" >> $output_file
 
 done < $input_file
 
-# On enregistre le résultat dans le fichier d'équivalence de notation
-echo "transformation des routes effectuée, le résultat est dans le fichier $output_file"
+# Save the result in the output file
+echo "The process is finished, the result is saved in $output_file"
 echo "" >> $output_file
 echo `echo option rfc3442-classless-static-routes $res | sed -e 's/.$/;/'` >> $output_file
 echo `echo option ms-classless-static-routes $res | sed -e 's/.$/;/'` >> $output_file 
