@@ -1,5 +1,17 @@
 #!/bin/bash 
 
+function showHelp()
+{
+    echo "routeConfig.sh - A script to convert routes to dhcpd.conf format"
+
+    echo "Usage: routeConfig.sh [options]"
+
+    echo "options:"
+    echo "-h, --help                show brief help"
+    echo "-i, --input               input file"
+    echo "-o, --output              output file"
+}
+
 # Convertir le masque au format CIDR
 function mask2cidr()
 {
@@ -79,16 +91,55 @@ function destinationShape()
 #subnetCidr 10.117.0.0 25
 #destinationShape 11.15.78.4
 
-# TODO gerer les arguments
+POSITIONAL_ARGS=()
 
-# Nom du fichier contenant les routes
-routes="routes.txt"
+# Initialize our own variables:
+output_file=""
+input_file=""
+res="" # result of the transformation
 
-res=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -o|--output)
+        output_file="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -i|--input)
+        input_file="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -h|--help)
+        showHelp
+        exit 0
+        ;;
+        *)    # unknown option
+        POSITIONAL_ARGS+=("$1") # save it in an array for later
+        shift # past argument
+        ;;
+    esac
+done
+
+# If input file is not specified exit
+if [ -z "$input_file" ]
+then
+    echo "Le fichier d'entrée n'est pas spécifié"
+    showHelp
+    exit 1
+fi
+
+# If output file is not specified, we use the default one named out.txt
+if [ -z "$output_file" ]
+then
+    output_file="out.txt"
+fi
+
+set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
 
 # On crée le fichier d'équivalence de notation
-touch equivalence.txt
-echo "  réseaux       masque      passerelle" > equivalence.txt
+touch $output_file
+echo "  réseau    masque   passerelle" > $output_file
 
 # Lire le fichier contenant les routes ligne par ligne
 while read line
@@ -130,12 +181,12 @@ do
     res="$res$network$destination, "
 
     # On ajoute les équivalences dans le fichier d'équivalence de notation 
-    echo "$line => $network$destination" >> equivalence.txt
+    echo "$line => $network$destination" >> $output_file
 
-done < $routes
+done < $input_file
 
 # On enregistre le résultat dans le fichier d'équivalence de notation
-echo "transformation des routes effectuée, le résultat est dans le fichier equivalence.txt"
-echo "" >> equivalence.txt
-echo `echo option rfc3442-classless-static-routes $res | sed -e 's/.$/;/'` >> equivalence.txt
-echo `echo option ms-classless-static-routes $res | sed -e 's/.$/;/'` >> equivalence.txt 
+echo "transformation des routes effectuée, le résultat est dans le fichier $output_file"
+echo "" >> $output_file
+echo `echo option rfc3442-classless-static-routes $res | sed -e 's/.$/;/'` >> $output_file
+echo `echo option ms-classless-static-routes $res | sed -e 's/.$/;/'` >> $output_file 
