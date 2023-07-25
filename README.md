@@ -29,8 +29,3 @@ Then when your file is complete, all you need to do is launch the script. The sc
 option rfc3442-classless-static-routes 24, 192, 168, 10, 10, 0, 0, 5, 17, 20, 240, 0, 10, 0, 0, 6;
 option ms-classless-static-routes 24, 192, 168, 10, 10, 0, 0, 5, 17, 20, 240, 0, 10, 0, 0, 6;
 ```
-## Improvements
-
-- Make the script robust
-- Enable option for input and output file
-- Option which print help about the script
