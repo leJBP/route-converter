@@ -19,6 +19,14 @@ function mask2cidr()
             ((masklen++))
             ((octetlen--))
         done
+
+        # Si octet < 0 alors le masque n'est pas valide
+        if [ "$octet" -lt 0 ]
+        then
+            masklen=-1
+            break
+        fi
+
     done
     echo $masklen #Retourne la longueur du masque
 
@@ -65,12 +73,13 @@ function destinationShape()
 
     echo "$res"
 }
-
 # Tests unitaires des fonctions
 
 #mask2cidr 255.255.128.0
 #subnetCidr 10.117.0.0 25
 #destinationShape 11.15.78.4
+
+# TODO gerer les arguments
 
 # Nom du fichier contenant les routes
 routes="routes.txt"
@@ -84,6 +93,16 @@ echo "  réseaux       masque      passerelle" > equivalence.txt
 # Lire le fichier contenant les routes ligne par ligne
 while read line
 do
+
+    # Check the format of the line
+    format=`echo $line | sed -r 's/((\s|^)((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])){3}/1/'`
+
+    if [ "$format" != "1" ]
+    then
+        echo "Le format de la ligne $line n'est pas valide"
+        exit 1
+    fi
+
     # On récupère le masque
     masque=`echo $line | awk '{print $2}'`
     #echo $masque
@@ -98,11 +117,14 @@ do
 
     # On appel les fonctions pour mettre en forme les données
     cidr=$(mask2cidr $masque)
-    #echo $cidr
+    if [ "$cidr" -eq "-1" ]
+    then
+        echo "Le masque $masque n'est pas valide"
+        exit 1
+    fi
+
     network=$(subnetCidr $reseau $cidr)
-    #echo $network
     destination=$(destinationShape $passerelle)
-    #echo $destination
 
     # On concatène les résultats
     res="$res$network$destination, "
